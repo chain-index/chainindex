@@ -1,0 +1,38 @@
+FROM golang:bullseye as builder
+
+RUN mkdir -p /go/chainindex /go/chainindex/build /go/chainindex/src
+
+COPY ./go.* /go/chainindex/
+COPY ./Makefile /go/chainindex/
+COPY ./build /go/chainindex/build
+COPY ./src /go/chainindex/src
+COPY ./data /go/chainindex/data
+  
+RUN cd chainindex && make \
+     && gunzip /go/chainindex/data/genesis/at_genesis_balances.csv.gz
+
+FROM debian:unstable-slim
+
+RUN groupadd -r -g 1099 chainindex \
+     && useradd --no-log-init -r -u 1099 -g chainindex chainindex \
+     && mkdir -p /opt/chainindex \
+     && chown chainindex -R /opt/chainindex \
+     && chgrp chainindex -R /opt/chainindex
+
+WORKDIR /opt/chainindex
+
+EXPOSE 16061
+
+USER chainindex:chainindex
+
+RUN mkdir -p /opt/chainindex/bin \
+     && mkdir -p /opt/chainindex/.chainindex \
+     && mkdir -p /opt/chainindex/.chainindex/data/genesis
+COPY LICENSE ./
+COPY --from=builder --chown=chainindex:chainindex /go/chainindex/build/bin /opt/chainindex/bin
+COPY --from=builder --chown=chainindex:chainindex /go/chainindex/data/genesis/at_genesis_balances.csv /opt/chainindex/.chainindex/data/genesis/
+COPY --from=builder --chown=chainindex:chainindex /go/chainindex/data/trackers.json /opt/chainindex/.chainindex/data/
+
+ENTRYPOINT ["/opt/chainindex/bin/node", "-ol-workdir=/opt/chainindex/.chainindex"]
+
+CMD ["-help"]

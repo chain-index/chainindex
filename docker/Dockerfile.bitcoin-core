@@ -1,0 +1,40 @@
+FROM debian:unstable-slim as builder
+
+ARG BTCD_VERSION=23.0
+
+WORKDIR /root
+
+COPY docker/btc-arch.sh ./
+
+RUN apt-get update && apt-get install -y wget pgp    
+RUN wget https://bitcoincore.org/bin/bitcoin-core-${BTCD_VERSION}/bitcoin-${BTCD_VERSION}-$(./btc-arch.sh).tar.gz \
+     && wget https://bitcoincore.org/bin/bitcoin-core-${BTCD_VERSION}/SHA256SUMS \
+     && wget https://bitcoincore.org/bin/bitcoin-core-${BTCD_VERSION}/SHA256SUMS.asc \
+     && sha256sum --ignore-missing --check SHA256SUMS \
+     && tar -xzf bitcoin-${BTCD_VERSION}-$(./btc-arch.sh).tar.gz \
+     && rm -rf bitcoin-${BTCD_VERSION}-$(./btc-arch.sh).tar.gz \
+     && mv bitcoin-${BTCD_VERSION} bitcoin
+
+FROM debian:unstable-slim
+
+RUN groupadd -r -g 1102 bitcoind \
+     && useradd --no-log-init -r -u 1102 -g bitcoind bitcoind \
+     && mkdir -p /opt/bitcoin \
+     && mkdir -p /data \
+     && chown bitcoind -R /opt/bitcoin \
+     && chgrp bitcoind -R /opt/bitcoin \
+     && chown bitcoind -R /data \
+     && chgrp bitcoind -R /data
+
+WORKDIR /opt/bitcoin
+
+EXPOSE 8333
+EXPOSE 8332
+
+USER bitcoind:bitcoind
+
+COPY --from=builder --chown=bitcoind:bitcoind /root/bitcoin/bin /opt/bitcoin/bin
+
+ENTRYPOINT ["/opt/bitcoin/bin/bitcoind", "-datadir=/data", "-prune=1024"]
+
+CMD ["--help"]

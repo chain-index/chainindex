@@ -1,0 +1,5 @@
+services:
+  # chainindex node
+  chainindex:
+    image: local/chainindex:latest
+    command: ["-blockchain-type=mainnet"]
